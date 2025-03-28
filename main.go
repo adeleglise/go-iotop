@@ -26,13 +26,17 @@ const (
 var currentSort SortBy
 
 type ProcessIO struct {
-	PID        int32
-	Name       string
-	ReadBytes  float64
-	WriteBytes float64
-	OpenFiles  []string
-	CPUPercent float64
-	MemPercent float32
+	PID         int32
+	Name        string
+	ReadBytes   float64
+	WriteBytes  float64
+	LastRead    float64
+	LastWrite   float64
+	ReadRate    float64
+	WriteRate   float64
+	OpenFiles   []string
+	CPUPercent  float64
+	MemPercent  float32
 }
 
 func min(a, b int) int {
@@ -102,23 +106,40 @@ func getProcessesIO() ([]ProcessIO, error) {
 			}
 		}
 
+		currentRead := float64(ioStats.ReadBytes)
+		currentWrite := float64(ioStats.WriteBytes)
+		
+		// Find previous stats to calculate rate
+		var readRate, writeRate float64
+		for _, prev := range processStats {
+			if prev.PID == p.Pid {
+				readRate = currentRead - prev.LastRead
+				writeRate = currentWrite - prev.LastWrite
+				break
+			}
+		}
+		
 		processStats = append(processStats, ProcessIO{
-			PID:        p.Pid,
-			Name:       name,
-			ReadBytes:  float64(ioStats.ReadBytes),
-			WriteBytes: float64(ioStats.WriteBytes),
-			OpenFiles:  files,
-			CPUPercent: cpuPercent,
-			MemPercent: memPercent,
+			PID:         p.Pid,
+			Name:        name,
+			ReadBytes:   currentRead,
+			WriteBytes:  currentWrite,
+			LastRead:    currentRead,
+			LastWrite:   currentWrite,
+			ReadRate:    readRate,
+			WriteRate:   writeRate,
+			OpenFiles:   files,
+			CPUPercent:  cpuPercent,
+			MemPercent:  memPercent,
 		})
 	}
 
 	sort.Slice(processStats, func(i, j int) bool {
 		switch currentSort {
 		case SortByRead:
-			return processStats[i].ReadBytes > processStats[j].ReadBytes
+			return processStats[i].ReadRate > processStats[j].ReadRate
 		case SortByWrite:
-			return processStats[i].WriteBytes > processStats[j].WriteBytes
+			return processStats[i].WriteRate > processStats[j].WriteRate
 		default:
 			return processStats[i].CPUPercent > processStats[j].CPUPercent
 		}
@@ -173,8 +194,8 @@ func main() {
 				p.Name,
 				fmt.Sprintf("%.1f", p.CPUPercent),
 				fmt.Sprintf("%.1f", p.MemPercent),
-				humanizeBytes(p.ReadBytes),
-				humanizeBytes(p.WriteBytes),
+				humanizeBytes(p.ReadRate),
+				humanizeBytes(p.WriteRate),
 				func() string {
 					if len(p.OpenFiles) == 0 {
 						return "-"
