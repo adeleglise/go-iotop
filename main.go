@@ -1,16 +1,6 @@
 
 package main
 
-type SortBy int
-
-const (
-	SortByCPU SortBy = iota
-	SortByRead
-	SortByWrite
-)
-
-var currentSort SortBy
-
 import (
 	"fmt"
 	"log"
@@ -24,6 +14,16 @@ import (
 	"github.com/shirou/gopsutil/v3/mem"
 	"github.com/shirou/gopsutil/v3/process"
 )
+
+type SortBy int
+
+const (
+	SortByCPU SortBy = iota
+	SortByRead
+	SortByWrite
+)
+
+var currentSort SortBy
 
 type ProcessIO struct {
 	PID        int32
