@@ -1,6 +1,16 @@
 
 package main
 
+type SortBy int
+
+const (
+	SortByCPU SortBy = iota
+	SortByRead
+	SortByWrite
+)
+
+var currentSort SortBy
+
 import (
 	"fmt"
 	"log"
@@ -117,21 +127,13 @@ func getProcessesIO() ([]ProcessIO, error) {
 	return processStats, nil
 }
 
-type SortBy int
-
-const (
-	SortByCPU SortBy = iota
-	SortByRead
-	SortByWrite
-)
-
 func main() {
 	if err := ui.Init(); err != nil {
 		log.Fatalf("failed to initialize termui: %v", err)
 	}
 	defer ui.Close()
 	
-	currentSort := SortByCPU
+	currentSort = SortByCPU
 
 	table := widgets.NewTable()
 	table.TextStyle = ui.NewStyle(ui.ColorWhite)
