@@ -25,8 +25,6 @@ type ProcessIO struct {
 	MemPercent float32
 }
 
-func humanizeBytes(bytes float64) string {
-
 func min(a, b int) int {
 	if a < b {
 		return a
@@ -34,7 +32,7 @@ func min(a, b int) int {
 	return b
 }
 
-
+func humanizeBytes(bytes float64) string {
 	units := []string{"B", "KB", "MB", "GB", "TB"}
 	unitIndex := 0
 	value := bytes
