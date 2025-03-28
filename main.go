@@ -79,7 +79,11 @@ func main() {
 		}
 
 		rows := [][]string{{"PID", "Name", "Read (B/s)", "Write (B/s)"}}
-		for _, p := range processes[:20] { // Show top 20 processes
+		maxProcesses := len(processes)
+		if maxProcesses > 20 {
+			maxProcesses = 20
+		}
+		for _, p := range processes[:maxProcesses] { // Show available processes up to 20
 			rows = append(rows, []string{
 				fmt.Sprintf("%d", p.PID),
 				p.Name,
