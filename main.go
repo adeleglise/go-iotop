@@ -114,6 +114,8 @@ func main() {
 	table.RowSeparator = true
 	table.BorderStyle = ui.NewStyle(ui.ColorGreen)
 	table.FillRow = true
+	table.MultiLine = true
+	table.RowHeight = 3
 	table.RowStyles[0] = ui.NewStyle(ui.ColorYellow, ui.ColorClear, ui.ModifierBold)
 
 	draw := func() {
@@ -147,7 +149,7 @@ func main() {
 				fmt.Sprintf("%.1f", p.MemPercent),
 				humanizeBytes(p.ReadBytes),
 				humanizeBytes(p.WriteBytes),
-				fmt.Sprintf("%v", strings.Join(p.OpenFiles, ", ")),
+				strings.Join(p.OpenFiles, "\n"),
 			})
 		}
 		table.Rows = rows
