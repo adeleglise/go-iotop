@@ -104,17 +104,34 @@ func getProcessesIO() ([]ProcessIO, error) {
 	}
 
 	sort.Slice(processStats, func(i, j int) bool {
-		return processStats[i].CPUPercent > processStats[j].CPUPercent
+		switch currentSort {
+		case SortByRead:
+			return processStats[i].ReadBytes > processStats[j].ReadBytes
+		case SortByWrite:
+			return processStats[i].WriteBytes > processStats[j].WriteBytes
+		default:
+			return processStats[i].CPUPercent > processStats[j].CPUPercent
+		}
 	})
 
 	return processStats, nil
 }
+
+type SortBy int
+
+const (
+	SortByCPU SortBy = iota
+	SortByRead
+	SortByWrite
+)
 
 func main() {
 	if err := ui.Init(); err != nil {
 		log.Fatalf("failed to initialize termui: %v", err)
 	}
 	defer ui.Close()
+	
+	currentSort := SortByCPU
 
 	table := widgets.NewTable()
 	table.TextStyle = ui.NewStyle(ui.ColorWhite)
@@ -184,6 +201,15 @@ func main() {
 			switch e.ID {
 			case "q", "<C-c>":
 				return
+			case "r":
+				currentSort = SortByRead
+				draw()
+			case "w":
+				currentSort = SortByWrite
+				draw()
+			case "c":
+				currentSort = SortByCPU
+				draw()
 			case "<Resize>":
 				draw()
 			}
