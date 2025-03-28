@@ -8,17 +8,12 @@ import (
 	"strings"
 	"time"
 
-	tea "github.com/charmbracelet/bubbletea"
+	ui "github.com/gizak/termui/v3"
+	"github.com/gizak/termui/v3/widgets"
 	"github.com/shirou/gopsutil/v3/cpu"
 	"github.com/shirou/gopsutil/v3/mem"
 	"github.com/shirou/gopsutil/v3/process"
 )
-
-type model struct {
-	processes []ProcessIO
-	selected  int
-	showFiles bool
-}
 
 type ProcessIO struct {
 	PID        int32
@@ -28,6 +23,13 @@ type ProcessIO struct {
 	OpenFiles  []string
 	CPUPercent float64
 	MemPercent float32
+}
+
+func min(a, b int) int {
+	if a < b {
+		return a
+	}
+	return b
 }
 
 func humanizeBytes(bytes float64) string {
@@ -43,18 +45,22 @@ func humanizeBytes(bytes float64) string {
 	return fmt.Sprintf("%.2f %s", value, units[unitIndex])
 }
 
-func getSystemStats() (float64, float64) {
+func getSystemStats() (*widgets.Gauge, *widgets.Gauge, error) {
+	cpuGauge := widgets.NewGauge()
+	cpuGauge.Title = "CPU Usage"
 	cpuPercent, err := cpu.Percent(0, false)
-	if err != nil || len(cpuPercent) == 0 {
-		return 0, 0
+	if err == nil && len(cpuPercent) > 0 {
+		cpuGauge.Percent = int(cpuPercent[0])
 	}
-
+	
+	memGauge := widgets.NewGauge()
+	memGauge.Title = "Memory Usage"
 	memStats, err := mem.VirtualMemory()
-	if err != nil {
-		return cpuPercent[0], 0
+	if err == nil {
+		memGauge.Percent = int(memStats.UsedPercent)
 	}
 
-	return cpuPercent[0], memStats.UsedPercent
+	return cpuGauge, memGauge, err
 }
 
 func getProcessesIO() ([]ProcessIO, error) {
@@ -104,74 +110,74 @@ func getProcessesIO() ([]ProcessIO, error) {
 	return processStats, nil
 }
 
-func (m model) Init() tea.Cmd {
-	return tick
-}
+func main() {
+	if err := ui.Init(); err != nil {
+		log.Fatalf("failed to initialize termui: %v", err)
+	}
+	defer ui.Close()
 
-func tick() tea.Msg {
-	time.Sleep(time.Second)
-	return tickMsg{}
-}
+	table := widgets.NewTable()
+	table.TextStyle = ui.NewStyle(ui.ColorWhite)
+	table.RowSeparator = true
+	table.BorderStyle = ui.NewStyle(ui.ColorGreen)
+	table.FillRow = true
+	table.RowStyles[0] = ui.NewStyle(ui.ColorYellow, ui.ColorClear, ui.ModifierBold)
 
-type tickMsg struct{}
-
-func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
-	switch msg := msg.(type) {
-	case tea.KeyMsg:
-		switch msg.String() {
-		case "q", "ctrl+c":
-			return m, tea.Quit
-		case "up":
-			if m.selected > 0 {
-				m.selected--
-			}
-		case "down":
-			if m.selected < len(m.processes)-1 {
-				m.selected++
-			}
-		case "enter":
-			m.showFiles = !m.showFiles
-		}
-	case tickMsg:
-		var err error
-		m.processes, err = getProcessesIO()
+	draw := func() {
+		w, h := ui.TerminalDimensions()
+		
+		cpuGauge, memGauge, _ := getSystemStats()
+		cpuGauge.SetRect(0, 0, w/2, 3)
+		memGauge.SetRect(w/2, 0, w, 3)
+		
+		table.SetRect(0, 3, w, h)
+		
+		processes, err := getProcessesIO()
 		if err != nil {
 			log.Printf("Error getting processes: %v", err)
+			return
 		}
-		return m, tick
+
+		rows := [][]string{{"PID", "Name", "CPU%", "MEM%", "Read/s", "Write/s", "Open Files"}}
+		maxProcesses := len(processes)
+		if maxProcesses > 20 {
+			maxProcesses = 20
+		}
+
+		table.ColumnWidths = []int{8, 30, 8, 8, 12, 12, 0} // Adjust column widths, last column takes remaining space
+		
+		for _, p := range processes[:maxProcesses] {
+			rows = append(rows, []string{
+				fmt.Sprintf("%d", p.PID),
+				p.Name,
+				fmt.Sprintf("%.1f", p.CPUPercent),
+				fmt.Sprintf("%.1f", p.MemPercent),
+				humanizeBytes(p.ReadBytes),
+				humanizeBytes(p.WriteBytes),
+				strings.Join(p.OpenFiles[:min(len(p.OpenFiles), 3)], ", "),
+			})
+		}
+		table.Rows = rows
+
+		ui.Render(cpuGauge, memGauge, table)
 	}
-	return m, nil
-}
 
-func (m model) View() string {
-	cpuPercent, memPercent := getSystemStats()
-	s := fmt.Sprintf("CPU Usage: %.1f%% | Memory Usage: %.1f%%\n\n", cpuPercent, memPercent)
-	s += "PID\tName\tCPU%\tMEM%\tRead/s\tWrite/s\n"
-	s += strings.Repeat("-", 80) + "\n"
+	draw()
 
-	for i, p := range m.processes {
-		cursor := " "
-		if i == m.selected {
-			cursor = ">"
-			if m.showFiles {
-				s += fmt.Sprintf("%s%d\t%s\t%.1f\t%.1f\t%s\t%s\n", cursor, p.PID, p.Name, p.CPUPercent, p.MemPercent, humanizeBytes(p.ReadBytes), humanizeBytes(p.WriteBytes))
-				s += "Open files:\n"
-				for _, file := range p.OpenFiles {
-					s += fmt.Sprintf("\t%s\n", file)
-				}
-				continue
+	uiEvents := ui.PollEvents()
+	ticker := time.NewTicker(time.Second).C
+
+	for {
+		select {
+		case e := <-uiEvents:
+			switch e.ID {
+			case "q", "<C-c>":
+				return
+			case "<Resize>":
+				draw()
 			}
+		case <-ticker:
+			draw()
 		}
-		s += fmt.Sprintf("%s%d\t%s\t%.1f\t%.1f\t%s\t%s\n", cursor, p.PID, p.Name, p.CPUPercent, p.MemPercent, humanizeBytes(p.ReadBytes), humanizeBytes(p.WriteBytes))
-	}
-
-	s += "\nPress up/down to select process, enter to show/hide files, q to quit"
-	return s
-}
-
-func main() {
-	p := tea.NewProgram(model{})
-	if err := p.Start(); err != nil {
-		log.Fatal(err)
 	}
 }
