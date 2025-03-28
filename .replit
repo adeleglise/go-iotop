@@ -17,3 +17,15 @@ build = "CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -a -o main"
 run = "./main"
 ignorePorts = false
 deploymentTarget = "gce"
+
+[workflows]
+runButton = "Run"
+
+[[workflows.workflow]]
+name = "Run"
+author = 38307364
+mode = "sequential"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "go run ."
