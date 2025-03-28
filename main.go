@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"sort"
+	"strings"
 	"time"
 
 	ui "github.com/gizak/termui/v3"
@@ -135,6 +136,8 @@ func main() {
 		if maxProcesses > 20 {
 			maxProcesses = 20
 		}
+
+		table.ColumnWidths = []int{8, 30, 8, 8, 12, 12, 0} // Adjust column widths, last column takes remaining space
 		
 		for _, p := range processes[:maxProcesses] {
 			rows = append(rows, []string{
@@ -144,7 +147,7 @@ func main() {
 				fmt.Sprintf("%.1f", p.MemPercent),
 				humanizeBytes(p.ReadBytes),
 				humanizeBytes(p.WriteBytes),
-				fmt.Sprintf("%v", p.OpenFiles),
+				fmt.Sprintf("%v", strings.Join(p.OpenFiles, ", ")),
 			})
 		}
 		table.Rows = rows
