@@ -121,6 +121,8 @@ func main() {
 	table.RowSeparator = true
 	table.BorderStyle = ui.NewStyle(ui.ColorGreen)
 	table.FillRow = true
+	table.Rows = make([][]string, 0)
+	table.RowStyles = make(map[int]ui.Style)
 	table.RowStyles[0] = ui.NewStyle(ui.ColorYellow, ui.ColorClear, ui.ModifierBold)
 
 	draw := func() {
@@ -154,7 +156,16 @@ func main() {
 				fmt.Sprintf("%.1f", p.MemPercent),
 				humanizeBytes(p.ReadBytes),
 				humanizeBytes(p.WriteBytes),
-				strings.Join(p.OpenFiles[:min(len(p.OpenFiles), 3)], ", "),
+				func() string {
+					if len(p.OpenFiles) == 0 {
+						return "-"
+					}
+					files := p.OpenFiles
+					if len(files) > 3 {
+						files = files[:3]
+					}
+					return strings.Join(files, "\n")
+				}(),
 			})
 		}
 		table.Rows = rows
