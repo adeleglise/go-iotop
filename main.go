@@ -13,10 +13,24 @@ import (
 )
 
 type ProcessIO struct {
-	PID       int32
-	Name      string
-	ReadBytes float64
+	PID        int32
+	Name       string
+	ReadBytes  float64
 	WriteBytes float64
+	OpenFiles  []string
+}
+
+func humanizeBytes(bytes float64) string {
+	units := []string{"B", "KB", "MB", "GB", "TB"}
+	unitIndex := 0
+	value := bytes
+
+	for value > 1024 && unitIndex < len(units)-1 {
+		value /= 1024
+		unitIndex++
+	}
+
+	return fmt.Sprintf("%.2f %s", value, units[unitIndex])
 }
 
 func getProcessesIO() ([]ProcessIO, error) {
@@ -37,11 +51,20 @@ func getProcessesIO() ([]ProcessIO, error) {
 			continue
 		}
 
+		openFiles, _ := p.OpenFiles()
+		files := make([]string, 0)
+		for _, f := range openFiles {
+			if f.Path != "" {
+				files = append(files, f.Path)
+			}
+		}
+
 		processStats = append(processStats, ProcessIO{
 			PID:        p.Pid,
 			Name:       name,
 			ReadBytes:  float64(ioStats.ReadBytes),
 			WriteBytes: float64(ioStats.WriteBytes),
+			OpenFiles:  files,
 		})
 	}
 
@@ -78,7 +101,7 @@ func main() {
 			return
 		}
 
-		rows := [][]string{{"PID", "Name", "Read (B/s)", "Write (B/s)"}}
+		rows := [][]string{{"PID", "Name", "Read/s", "Write/s", "Open Files"}}
 		maxProcesses := len(processes)
 		if maxProcesses > 20 {
 			maxProcesses = 20
@@ -87,8 +110,9 @@ func main() {
 			rows = append(rows, []string{
 				fmt.Sprintf("%d", p.PID),
 				p.Name,
-				fmt.Sprintf("%.2f", p.ReadBytes),
-				fmt.Sprintf("%.2f", p.WriteBytes),
+				humanizeBytes(p.ReadBytes),
+				humanizeBytes(p.WriteBytes),
+				fmt.Sprintf("%v", p.OpenFiles),
 			})
 		}
 		table.Rows = rows
