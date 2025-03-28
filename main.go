@@ -9,6 +9,8 @@ import (
 
 	ui "github.com/gizak/termui/v3"
 	"github.com/gizak/termui/v3/widgets"
+	"github.com/shirou/gopsutil/v3/cpu"
+	"github.com/shirou/gopsutil/v3/mem"
 	"github.com/shirou/gopsutil/v3/process"
 )
 
@@ -18,6 +20,8 @@ type ProcessIO struct {
 	ReadBytes  float64
 	WriteBytes float64
 	OpenFiles  []string
+	CPUPercent float64
+	MemPercent float32
 }
 
 func humanizeBytes(bytes float64) string {
@@ -31,6 +35,24 @@ func humanizeBytes(bytes float64) string {
 	}
 
 	return fmt.Sprintf("%.2f %s", value, units[unitIndex])
+}
+
+func getSystemStats() (*widgets.Gauge, *widgets.Gauge, error) {
+	cpuGauge := widgets.NewGauge()
+	cpuGauge.Title = "CPU Usage"
+	cpuPercent, err := cpu.Percent(0, false)
+	if err == nil && len(cpuPercent) > 0 {
+		cpuGauge.Percent = int(cpuPercent[0])
+	}
+	
+	memGauge := widgets.NewGauge()
+	memGauge.Title = "Memory Usage"
+	memStats, err := mem.VirtualMemory()
+	if err == nil {
+		memGauge.Percent = int(memStats.UsedPercent)
+	}
+
+	return cpuGauge, memGauge, err
 }
 
 func getProcessesIO() ([]ProcessIO, error) {
@@ -51,6 +73,9 @@ func getProcessesIO() ([]ProcessIO, error) {
 			continue
 		}
 
+		cpuPercent, _ := p.CPUPercent()
+		memPercent, _ := p.MemoryPercent()
+
 		openFiles, _ := p.OpenFiles()
 		files := make([]string, 0)
 		for _, f := range openFiles {
@@ -65,12 +90,13 @@ func getProcessesIO() ([]ProcessIO, error) {
 			ReadBytes:  float64(ioStats.ReadBytes),
 			WriteBytes: float64(ioStats.WriteBytes),
 			OpenFiles:  files,
+			CPUPercent: cpuPercent,
+			MemPercent: memPercent,
 		})
 	}
 
 	sort.Slice(processStats, func(i, j int) bool {
-		return processStats[i].ReadBytes+processStats[i].WriteBytes > 
-		       processStats[j].ReadBytes+processStats[j].WriteBytes
+		return processStats[i].CPUPercent > processStats[j].CPUPercent
 	})
 
 	return processStats, nil
@@ -83,40 +109,47 @@ func main() {
 	defer ui.Close()
 
 	table := widgets.NewTable()
-	table.Rows = [][]string{
-		{"PID", "Name", "Read (B/s)", "Write (B/s)"},
-	}
 	table.TextStyle = ui.NewStyle(ui.ColorWhite)
-	table.BorderStyle = ui.NewStyle(ui.ColorGreen)
 	table.RowSeparator = true
+	table.BorderStyle = ui.NewStyle(ui.ColorGreen)
 	table.FillRow = true
+	table.RowStyles[0] = ui.NewStyle(ui.ColorYellow, ui.ColorClear, ui.ModifierBold)
 
 	draw := func() {
 		w, h := ui.TerminalDimensions()
-		table.SetRect(0, 0, w, h)
-
+		
+		cpuGauge, memGauge, _ := getSystemStats()
+		cpuGauge.SetRect(0, 0, w/2, 3)
+		memGauge.SetRect(w/2, 0, w, 3)
+		
+		table.SetRect(0, 3, w, h)
+		
 		processes, err := getProcessesIO()
 		if err != nil {
 			log.Printf("Error getting processes: %v", err)
 			return
 		}
 
-		rows := [][]string{{"PID", "Name", "Read/s", "Write/s", "Open Files"}}
+		rows := [][]string{{"PID", "Name", "CPU%", "MEM%", "Read/s", "Write/s", "Open Files"}}
 		maxProcesses := len(processes)
 		if maxProcesses > 20 {
 			maxProcesses = 20
 		}
-		for _, p := range processes[:maxProcesses] { // Show available processes up to 20
+		
+		for _, p := range processes[:maxProcesses] {
 			rows = append(rows, []string{
 				fmt.Sprintf("%d", p.PID),
 				p.Name,
+				fmt.Sprintf("%.1f", p.CPUPercent),
+				fmt.Sprintf("%.1f", p.MemPercent),
 				humanizeBytes(p.ReadBytes),
 				humanizeBytes(p.WriteBytes),
 				fmt.Sprintf("%v", p.OpenFiles),
 			})
 		}
 		table.Rows = rows
-		ui.Render(table)
+
+		ui.Render(cpuGauge, memGauge, table)
 	}
 
 	draw()
